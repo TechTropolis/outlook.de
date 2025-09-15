@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- === تعديلات PWA: ربط ملف البيان ولون الشريط العلوي === -->
+    <meta name="theme-color" content="#ffffff"/>
+    <link rel="manifest" href="manifest.json">
+    <!-- ====================================================== -->
+    
+    <title>Outlook.de Video Hub</title>
+    <style>
+        /* CSS الكامل من النسخة السابقة يوضع هنا... */
+        :root {
+            --primary-bg: #f8f9fa; --secondary-bg: #ffffff; --primary-text: #212529; --secondary-text: #6c757d;
+            --accent-color: #0078D4; --border-color: #dee2e6; --active-bg: #e7f3ff; --like-color: #e74c3c;
+            --save-color: #1abc9c; --header-shadow: 0 1px 2px rgba(0,0,0,0.05); --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        [data-theme="dark"] {
+            --primary-bg: #121212; --secondary-bg: #1e1e1e; --primary-text: #e9ecef; --secondary-text: #adb5bd;
+            --border-color: #343a40; --active-bg: #004578;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        * { box-sizing: border-box; }
+        body { font-family: var(--font-family); margin: 0; background-color: var(--primary-bg); color: var(--primary-text); overflow: hidden; height: 100vh; transition: background-color 0.3s, color 0.3s; }
+        .outlook-container { display: flex; flex-direction: column; height: 100%; }
+        .header { display: flex; align-items: center; padding: 0.75rem 1rem; background-color: var(--secondary-bg); box-shadow: var(--header-shadow); z-index: 10; flex-shrink: 0; }
+        #menu-toggle { display: none; }
+        .logo { font-size: 1.5rem; font-weight: 600; color: var(--accent-color); margin-inline-end: 1rem; }
+        .search-container { flex-grow: 1; max-width: 500px; margin: 0 1rem; position: relative; }
+        #search-input { width: 100%; height: 40px; padding: 0 40px 0 15px; border: 1px solid var(--border-color); border-radius: 5px; background-color: var(--primary-bg); color: var(--primary-text); }
+        .header-controls { display: flex; align-items: center; gap: 0.5rem; position: relative; }
+        .icon-button { background: transparent; border: none; cursor: pointer; padding: 0.5rem; color: var(--secondary-text); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s; }
+        .icon-button:hover { background-color: var(--primary-bg); }
+        .icon-button svg { width: 20px; height: 20px; }
+        #settings-popover { position: absolute; top: 110%; left: 0; background-color: var(--secondary-bg); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 11; width: 220px; padding: 0.5rem; }
+        .settings-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; border-radius: 5px; }
+        .switch { position: relative; display: inline-block; width: 34px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 20px; }
+        .slider:before { position: absolute; content: ""; height: 12px; width: 12px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--accent-color); }
+        input:checked + .slider:before { transform: translateX(14px); }
+        .main-layout { display: grid; grid-template-columns: 250px 1fr 1.5fr; height: 100%; overflow: hidden; }
+        .left-pane, .middle-pane, .right-pane { height: 100%; overflow-y: auto; background-color: var(--secondary-bg); }
+        .left-pane { border-left: 1px solid var(--border-color); transition: transform 0.3s ease; padding: 1rem; }
+        .middle-pane { border-left: 1px solid var(--border-color); }
+        .right-pane { background-color: var(--primary-bg); padding: 2rem; position: relative; display: flex; flex-direction: column; justify-content: center; }
+        .nav-list .nav-item { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; border-radius: 5px; cursor: pointer; font-weight: 500; transition: background-color 0.2s; }
+        .nav-list .nav-item svg { stroke: var(--secondary-text); transition: stroke 0.2s; width: 20px; height: 20px; }
+        .nav-list .nav-item:hover { background-color: var(--primary-bg); }
+        .nav-list .nav-item.active { background-color: var(--active-bg); color: var(--accent-color); }
+        .nav-list .nav-item.active svg { stroke: var(--accent-color); }
+        [data-theme="dark"] .nav-list .nav-item.active { color: #fff; }
+        [data-theme="dark"] .nav-list .nav-item.active svg { stroke: #fff; }
+        .video-list-item { display: flex; gap: 1rem; padding: 1rem; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background-color 0.2s; }
+        .video-list-item:hover { background-color: var(--primary-bg); }
+        .video-list-item.active { background-color: var(--active-bg); }
+        .shorts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1.5rem; padding: 1rem; }
+        .short-card { cursor: pointer; }
+        .short-card .thumbnail { width: 100%; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 8px; }
+        .short-card .title { font-size: 0.85rem; margin-top: 0.5rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        #video-viewer.is-shorts-viewer { align-items: center; }
+        #video-viewer.is-shorts-viewer #player-container { width: 320px; max-width: 90vw; height: 568px; max-height: 80vh; aspect-ratio: 9 / 16; }
+        #video-viewer.is-shorts-viewer .viewer-header { max-width: 320px; margin: 0 auto; }
+        #player-container { width: 100%; aspect-ratio: 16 / 9; background-color: #000; margin-bottom: 1.5rem; border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+        .hidden { display: none !important; }
+        @media (max-width: 768px) {
+            #menu-toggle { display: block; } .main-layout { display: block; position: relative; }
+            .left-pane { position: fixed; top: 0; right: 0; height: 100%; width: 250px; z-index: 100; transform: translateX(100%); box-shadow: -2px 0 10px rgba(0,0,0,0.1); }
+            body.nav-open .left-pane { transform: translateX(0); }
+            .middle-pane, .right-pane { width: 100%; height: 100%; }
+            .right-pane { position: fixed; top: 0; right: 0; z-index: 101; transform: translateX(100%); padding: 1rem; }
+            body.viewer-active .right-pane { transform: translateX(0); }
+            #video-viewer.is-shorts-viewer #player-container { width: 100%; height: 80%; }
+        }
+        .video-list-item .thumbnail { width: 120px; height: 68px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+        .video-list-item .details { overflow: hidden; } .video-list-item .channel-name { font-weight: 600; font-size: 0.9rem; }
+        .video-list-item .title { font-size: 0.85rem; margin: 0.25rem 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #video-viewer .placeholder { text-align: center; color: var(--secondary-text); }
+        .loader { width: 40px; height: 40px; border: 4px solid var(--border-color); border-top: 4px solid var(--accent-color); border-radius: 50%; animation: spin 1s linear infinite; margin: auto; }
+        .section-title { font-size: 1.2rem; font-weight: 600; padding: 1rem 1rem 0.5rem; }
+        #player-container iframe { width: 100%; height: 100%; border: none; }
+        #viewer-title { font-size: 1.2rem; font-weight: 600; margin: 0 0 0.5rem 0; flex-grow: 1; }
+        .viewer-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+        .viewer-actions { display: flex; gap: 0.5rem; }
+        .viewer-actions .icon-button svg { width: 22px; height: 22px; transition: all 0.2s; }
+        #like-button.active svg { fill: var(--like-color); stroke: var(--like-color); }
+        #save-button.active svg { fill: var(--save-color); stroke: var(--save-color); }
+    </style>
+</head>
+<body>
+    <!-- محتوى Body الكامل من النسخة السابقة يوضع هنا... -->
+    <div class="outlook-container">
+        <header class="header">
+            <button id="menu-toggle" class="icon-button"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"></path></svg></button>
+            <div class="logo">outlook<span>.de</span></div>
+            <form id="search-form" class="search-container"><input type="text" id="search-input" placeholder="بحث..." required><button type="submit" id="search-button" title="بحث" class="icon-button" style="position:absolute; top:0; left:0; height:100%; width:40px;"><svg viewBox="0 0 24 24" fill="currentColor" stroke-width="2"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"></path></svg></button></form>
+            <div class="header-controls">
+                <button id="settings-toggle" class="icon-button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
+                <div id="settings-popover" class="hidden"><div class="settings-item"><span>الوضع الداكن</span><label class="switch"><input type="checkbox" id="theme-checkbox"><span class="slider"></span></label></div></div>
+            </div>
+        </header>
+        <main class="main-layout">
+            <nav id="left-pane" class="left-pane"><ul id="nav-list" class="nav-list" style="list-style: none; padding: 0;"></ul></nav>
+            <section id="video-list-container" class="middle-pane"></section>
+            <article id="video-viewer" class="right-pane"></article>
+        </main>
+    </div>
+    <script>
+        // --- تعديل PWA: تسجيل عامل الخدمة ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => console.log('ServiceWorker registration successful'))
+                    .catch(err => console.log('ServiceWorker registration failed: ', err));
+            });
+        }
+        // ===================================
+        
+        // --- الكود الكامل للـ JavaScript من النسخة السابقة يوضع هنا... ---
+        const doc = document.documentElement, body = document.body;
+        const menuToggle = document.getElementById('menu-toggle'), settingsToggle = document.getElementById('settings-toggle');
+        const settingsPopover = document.getElementById('settings-popover'), themeCheckbox = document.getElementById('theme-checkbox');
+        const videoListContainer = document.getElementById('video-list-container'), videoViewer = document.getElementById('video-viewer');
+        const navList = document.getElementById('nav-list'), searchForm = document.getElementById('search-form'), searchInput = document.getElementById('search-input');
+        const API_KEY = 'AIzaSyBdq8J9zvSEtZUinUKTDrdkRz9gpFN1Kfw';
+        let currentSearchResults = [];
+        const navItems = [
+            { id: 'home', text: 'الرئيسية', icon: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>' },
+            { id: 'shorts', text: 'Shorts', icon: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 10l7.39-2.55a2 2 0 0 1 2.45 2.45L20.29 17l-7.39 2.55a2 2 0 0 1-2.45-2.45l2.55-7.39z"></path><path d="M10.88 13.12l-5.7-5.7a2 2 0 0 1 0-2.82l1.4-1.4a2 2 0 0 1 2.82 0l5.7 5.7"></path></svg>' },
+            { id: 'saved', text: 'المحفوظات', icon: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>' },
+            { id: 'liked', text: 'أعجبني', icon: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>' },
+            { id: 'history', text: 'السجل', icon: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"></path><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>' },
+            { id: 'search', text: 'نتائج البحث', icon: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>', isHidden: true }
+        ];
+        const setTheme = (theme) => { doc.setAttribute('data-theme', theme); localStorage.setItem('theme', theme); themeCheckbox.checked = theme === 'dark'; };
+        themeCheckbox.addEventListener('change', () => setTheme(themeCheckbox.checked ? 'dark' : 'light'));
+        menuToggle.addEventListener('click', () => body.classList.toggle('nav-open'));
+        settingsToggle.addEventListener('click', (e) => { e.stopPropagation(); settingsPopover.classList.toggle('hidden'); });
+        document.addEventListener('click', (e) => {
+            if (!settingsPopover.contains(e.target) && !settingsToggle.contains(e.target)) settingsPopover.classList.add('hidden');
+            if (!document.getElementById('left-pane').contains(e.target) && !menuToggle.contains(e.target)) body.classList.remove('nav-open');
+        });
+        const getStoredIds = (key) => JSON.parse(localStorage.getItem(key)) || [];
+        const saveStoredIds = (key, ids) => localStorage.setItem(key, JSON.stringify(ids));
+        const isLiked = (vId) => getStoredIds('likedVideos').includes(vId);
+        const isSaved = (vId) => getStoredIds('savedVideos').includes(vId);
+        const toggleLike = (vId) => { let l = getStoredIds('likedVideos'); l.includes(vId) ? l = l.filter(i => i !== vId) : l.unshift(vId); saveStoredIds('likedVideos', l); };
+        const toggleSave = (vId) => { let s = getStoredIds('savedVideos'); s.includes(vId) ? s = s.filter(i => i !== vId) : s.unshift(vId); saveStoredIds('savedVideos', s); };
+        const addToHistory = (vId) => { let h = getStoredIds('watchHistory'); h = h.filter(i => i !== vId); h.unshift(vId); if (h.length > 50) h.pop(); saveStoredIds('watchHistory', h); };
+        const fetchFromApi = async (url) => { try { const r = await fetch(url); return r.ok ? await r.json() : null; } catch (e) { console.error(e); return null; } };
+        const searchYouTube = (q, type) => fetchFromApi(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${q}&key=${API_KEY}&type=${type}&maxResults=20`);
+        const fetchPopularVideos = () => fetchFromApi(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular&regionCode=SA&maxResults=20&key=${API_KEY}`);
+        const fetchVideosByIds = (ids) => fetchFromApi(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${ids.join(',')}&key=${API_KEY}`);
+        const fetchVideoDetails = (id) => fetchFromApi(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${id}&key=${API_KEY}`);
+        const showLoader = (c) => { c.innerHTML = '<div class="loader"></div>'; };
+        const renderPlaceholder = () => { videoViewer.innerHTML = `<div class="placeholder"><h3>حدد فيديو لعرضه هنا</h3></div>`; };
+        const renderEmptyState = (c, m) => { c.innerHTML = `<p style="text-align:center; padding: 2rem;">${m}</p>`; };
+        const createVideoListItem = (item) => `<li class="video-list-item" data-video-id="${item.id.videoId || item.id}"><img class="thumbnail" src="${item.snippet.thumbnails.medium.url}" alt=""><div class="details"><div class="channel-name">${item.snippet.channelTitle}</div><div class="title">${item.snippet.title}</div></div></li>`;
+        const createShortCard = (item) => `<div class="short-card" data-video-id="${item.id.videoId}" data-is-short="true"><img class="thumbnail" src="${item.snippet.thumbnails.high.url}" alt=""><h4 class="title">${item.snippet.title}</h4></div>`;
+        const renderHome = async () => { showLoader(videoListContainer); const data = await fetchPopularVideos(); videoListContainer.innerHTML = `<h2 class="section-title">فيديوهات رائجة</h2><ul style="list-style:none; padding:0;">${data?.items.map(createVideoListItem).join('')||''}</ul>`; };
+        const renderShorts = async () => { showLoader(videoListContainer); const data = await searchYouTube('shorts', 'video'); videoListContainer.innerHTML = `<h2 class="section-title">Shorts</h2><div class="shorts-grid">${data?.items.map(createShortCard).join('')||''}</div>`; };
+        const renderVideosFromStorage = async (key, title) => { showLoader(videoListContainer); const ids = getStoredIds(key); if (ids.length === 0) { renderEmptyState(videoListContainer, `قائمة "${title}" فارغة.`); return; } const data = await fetchVideosByIds(ids); videoListContainer.innerHTML = `<h2 class="section-title">${title}</h2><ul style="list-style:none; padding:0;">${data?.items.map(createVideoListItem).join('')||''}</ul>`; };
+        const renderSearchResults = () => { if (currentSearchResults.length === 0) { renderEmptyState(videoListContainer, 'لم يتم العثور على نتائج.'); return; } videoListContainer.innerHTML = `<h2 class="section-title">نتائج البحث</h2><ul style="list-style:none; padding:0;">${currentSearchResults.map(createVideoListItem).join('')}</ul>`; };
+        const renderVideoViewer = async (videoId, isShort = false) => {
+            showLoader(videoViewer); const data = await fetchVideoDetails(videoId); if (!data || !data.items.length) { videoViewer.innerHTML = 'فشل تحميل الفيديو.'; return; }
+            const video = data.items[0]; const liked = isLiked(videoId); const saved = isSaved(videoId);
+            videoViewer.className = `right-pane ${isShort ? 'is-shorts-viewer' : ''}`;
+            videoViewer.innerHTML = `<button id="back-to-list-btn" class="icon-button"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.77 3.77 16 2 6 12l10 10 1.77-1.77L9.54 12z"></path></svg></button><div class="viewer-content" style="width:100%;"><div id="player-container"><iframe src="https://www.youtube.com/embed/${videoId}?autoplay=1" allow="autoplay" allowfullscreen></iframe></div><div class="viewer-header"><h2 id="viewer-title">${video.snippet.title}</h2><div class="viewer-actions"><button id="save-button" class="icon-button ${saved?'active':''}" data-video-id="${videoId}" title="حفظ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></button><button id="like-button" class="icon-button ${liked?'active':''}" data-video-id="${videoId}" title="إعجاب"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></button></div></div></div>`;
+            document.getElementById('like-button').addEventListener('click', (e)=>{const b=e.currentTarget; toggleLike(b.dataset.videoId); b.classList.toggle('active');});
+            document.getElementById('save-button').addEventListener('click', (e)=>{const b=e.currentTarget; toggleSave(b.dataset.videoId); b.classList.toggle('active');});
+            document.getElementById('back-to-list-btn').addEventListener('click', () => body.classList.remove('viewer-active'));
+        };
+        const setActiveNav = (navType) => { document.querySelector('[data-nav="search"]').classList.toggle('hidden', navType !== 'search'); navList.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.nav === navType)); };
+        searchForm.addEventListener('submit', async (e) => { e.preventDefault(); const q = searchInput.value.trim(); if (!q) return; showLoader(videoListContainer); setActiveNav('search'); renderPlaceholder(); const data = await searchYouTube(q, 'video'); currentSearchResults = data ? data.items : []; renderSearchResults(); });
+        videoListContainer.addEventListener('click', (e) => { const item = e.target.closest('.video-list-item, .short-card'); if (!item) return; document.querySelectorAll('.video-list-item.active, .short-card.active').forEach(a => a.classList.remove('active')); item.classList.add('active'); const videoId = item.dataset.videoId; const isShort = item.hasAttribute('data-is-short'); addToHistory(videoId); renderVideoViewer(videoId, isShort); if (window.innerWidth <= 768) body.classList.add('viewer-active'); });
+        navList.addEventListener('click', (e) => {
+            const navItem = e.target.closest('.nav-item'); if (!navItem) return; const navType = navItem.dataset.nav;
+            setActiveNav(navType); renderPlaceholder();
+            const actions = { home: renderHome, shorts: renderShorts, saved: () => renderVideosFromStorage('savedVideos', 'المحفوظات'), liked: () => renderVideosFromStorage('likedVideos','أعجبني'), history: () => renderVideosFromStorage('watchHistory','السجل'), search: renderSearchResults };
+            actions[navType]();
+            if (window.innerWidth <= 768) body.classList.remove('nav-open');
+        });
+        (function init() {
+            setTheme(localStorage.getItem('theme') || 'light');
+            navList.innerHTML = navItems.map(item => `<li class="nav-item ${item.isHidden ? 'hidden' : ''}" data-nav="${item.id}">${item.icon}<span>${item.text}</span></li>`).join('');
+            setActiveNav('home');
+            renderPlaceholder();
+            renderHome();
+        })();
+    </script>
+</body>
+</html>
